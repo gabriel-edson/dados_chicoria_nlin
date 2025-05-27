@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisador Interativo de Crescimento de Chicória</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Visualization & Content Choices:
+    - Introdução: Texto do resumo do artigo.
+    - Explorar Dados:
+        - Info: Dados de crescimento/nutrientes (das tabelas da dissertação/PDFs).
+        - Goal: Explorar dados brutos.
+        - Viz: Gráfico de Linhas (Chart.js) para tendências temporais; Tabela HTML para valores exatos.
+        - Interaction: Dropdowns para Variável, Cultivar, Sistema de Cultivo, Tratamento específico.
+        - Justification: Permite visualização direta e filtragem dos dados base.
+        - Library: Chart.js, HTML+Tailwind.
+    - Modelagem Não Linear:
+        - Info: Equações Logístico/Gompertz (do artigo/imagens).
+        - Goal: Entender e visualizar o ajuste dos modelos aos dados observados.
+        - Viz: Gráfico de Linhas (Chart.js) com dados observados + curva do modelo.
+        - Interaction: Seletores de Variável, Tratamento. Campos para inserir parâmetros α, β, κ e atualizar a curva do modelo dinamicamente.
+        - Justification: Permite ao usuário (estatístico) conectar seus dados com a teoria dos modelos e visualizar o impacto dos parâmetros.
+        - Library: Chart.js.
+    - Comparações entre Tratamentos:
+        - Info: Dados observados (ex: valor máximo aos 42 DAT) ou parâmetros de modelo inseridos pelo usuário.
+        - Goal: Comparar performance entre os 4 tratamentos.
+        - Viz: Gráficos de Barras (Chart.js).
+        - Interaction: Seletores para escolher variável.
+        - Justification: Facilita a identificação de diferenças.
+        - Library: Chart.js.
+    - Conclusões: Texto das conclusões do artigo.
+    - NO SVG/Mermaid. Ícones via Unicode/HTML+CSS se necessário.
+    -->
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chart-container { position: relative; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; height: 400px; max-height: 50vh; }
+        .nav-button { transition: background-color 0.3s, color 0.3s; }
+        .nav-button.active { background-color: #059669; color: white; }
+        .nav-button:not(.active):hover { background-color: #D1FAE5; }
+        label { margin-top: 0.5rem; }
+        select, input[type="number"] {
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            border: 1px solid #D1D5DB;
+            margin-top: 0.25rem;
+            width: 100%;
+        }
+        .parameter-input-group { display: flex; gap: 0.5rem; align-items: center; }
+        .parameter-input-group label { white-space: nowrap; }
+         ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px;}
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 10px;}
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        h2 { font-size: 1.75rem; font-weight: 600; margin-bottom: 1rem; color: #1f2937; }
+        h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #374151; }
+    </style>
+</head>
+<body class="bg-stone-100 text-neutral-800">
+    <header class="bg-emerald-700 text-white p-6 shadow-md">
+        <h1 class="text-3xl font-bold text-center">Analisador Interativo de Crescimento e Nutrição de Chicória</h1>
+    </header>
+
+    <nav class="bg-white shadow-md sticky top-0 z-50">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-center space-x-2 py-3">
+                <button data-section="intro" class="nav-button active px-4 py-2 rounded-md text-sm font-medium text-gray-700">Introdução</button>
+                <button data-section="data-explorer" class="nav-button px-4 py-2 rounded-md text-sm font-medium text-gray-700">Explorar Dados</button>
+                <button data-section="modeling" class="nav-button px-4 py-2 rounded-md text-sm font-medium text-gray-700">Modelagem Não Linear</button>
+                <button data-section="comparisons" class="nav-button px-4 py-2 rounded-md text-sm font-medium text-gray-700">Comparações</button>
+                <button data-section="conclusions" class="nav-button px-4 py-2 rounded-md text-sm font-medium text-gray-700">Conclusões</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto p-4 md:p-8">
+        <section id="intro" class="content-section bg-white p-6 rounded-lg shadow">
+            <h2>Introdução à Pesquisa</h2>
+            <p class="text-gray-700 leading-relaxed">
+                Este estudo analisa o crescimento e o acúmulo de macronutrientes em duas cultivares de chicória ('Chicória Crespa' e 'AF-218'), cultivadas sob dois sistemas distintos (com e sem cobertura de tecido de polipropileno). O objetivo central é empregar modelos não lineares, como o Logístico e o Gompertz, para descrever a dinâmica desses processos biológicos ao longo do tempo, utilizando uma abordagem de inferência Bayesiana.
+                A chicória (*Cichorium intybus L.*) é uma cultura folhosa de crescente importância. Compreender seu crescimento e nutrição é vital para otimizar o manejo. Modelos não lineares são essenciais, pois capturam as fases de crescimento (lento inicial, rápido exponencial, desaceleração/platô) de forma mais realista que modelos lineares. A abordagem Bayesiana permite incorporar conhecimento prévio e quantificar incertezas de forma robusta.
+            </p>
+            <p class="text-gray-700 leading-relaxed mt-4">
+                Os objetivos específicos incluem: ajustar modelos não lineares para crescimento e acúmulo de nutrientes; avaliar o impacto das cultivares e sistemas de cultivo; usar inferência Bayesiana para estimar parâmetros e comparar tratamentos; e interpretar pontos característicos das curvas (ponto de inflexão, taxas máximas) para relevância agronômica.
+            </p>
+             <p class="text-gray-700 leading-relaxed mt-4">
+                Use a navegação acima para explorar os dados do experimento, visualizar ajustes de modelos não lineares, comparar tratamentos e revisar as conclusões.
+            </p>
+        </section>
+
+        <section id="data-explorer" class="content-section hidden bg-white p-6 rounded-lg shadow mt-6">
+            <h2>Explorador de Dados Experimentais</h2>
+            <p class="text-gray-600 mb-6">Selecione uma variável, cultivar e sistema de cultivo para visualizar os dados observados ao longo do tempo. Você também pode optar por ver todos os tratamentos combinados para uma variável específica.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div>
+                    <label for="variable-select" class="block text-sm font-medium text-gray-700">Variável:</label>
+                    <select id="variable-select" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                    </select>
+                </div>
+                <div>
+                    <label for="cultivar-select" class="block text-sm font-medium text-gray-700">Cultivar:</label>
+                    <select id="cultivar-select" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                        <option value="Todos">Todas</option>
+                        <option value="AF-218">AF-218</option>
+                        <option value="Crespa">Crespa</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="system-select" class="block text-sm font-medium text-gray-700">Sistema de Cultivo:</label>
+                    <select id="system-select" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                        <option value="Todos">Todos</option>
+                        <option value="Coberta">Coberto com TP</option>
+                        <option value="Descoberta">Descoberto (sem TP)</option>
+                    </select>
+                </div>
+                 <div>
+                    <label for="show-all-treatments" class="block text-sm font-medium text-gray-700">Visualização:</label>
+                    <select id="show-all-treatments" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                        <option value="false">Filtrar por Cultivar/Sistema</option>
+                        <option value="true">Mostrar Todos os 4 Tratamentos</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="chart-container mb-6">
+                <canvas id="dataChart"></canvas>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-700 mb-2">Dados Tabulados (Médias)</h3>
+            <div class="overflow-x-auto">
+                <table id="dataTable" class="min-w-full divide-y divide-gray-200 border border-gray-300">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Idade (DAT)</th>
+                            <th id="dataTableVariableHeader" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody" class="bg-white divide-y divide-gray-200">
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="modeling" class="content-section hidden bg-white p-6 rounded-lg shadow mt-6">
+            <h2>Modelagem Não Linear (Logístico e Gompertz)</h2>
+            <p class="text-gray-600 mb-4">Explore como os modelos Logístico e Gompertz podem descrever os dados. Selecione uma variável e um tratamento específico. Em seguida, insira os parâmetros (α, β, κ) para cada modelo e veja a curva resultante sobreposta aos dados observados.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                    <label for="model-variable-select" class="block text-sm font-medium text-gray-700">Variável:</label>
+                    <select id="model-variable-select"></select>
+                </div>
+                <div>
+                    <label for="model-treatment-select" class="block text-sm font-medium text-gray-700">Tratamento:</label>
+                    <select id="model-treatment-select">
+                        <option value="AF-218 Coberta">AF-218 Coberta</option>
+                        <option value="AF-218 Descoberta">AF-218 Descoberta</option>
+                        <option value="Crespa Coberta">Crespa Coberta</option>
+                        <option value="Crespa Descoberta">Crespa Descoberta</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-emerald-700">Modelo Logístico</h3>
+                    <p class="text-sm text-gray-500 mb-2">Equação: Y = α / (1 + exp(κ * (β - X)))</p>
+                    <div class="space-y-2">
+                        <div class="parameter-input-group">
+                            <label for="logistic-alpha" class="text-sm">α (Assíntota):</label>
+                            <input type="number" id="logistic-alpha" step="any" placeholder="Ex: 800">
+                        </div>
+                        <div class="parameter-input-group">
+                            <label for="logistic-beta" class="text-sm">β (Inflexão):</label>
+                            <input type="number" id="logistic-beta" step="any" placeholder="Ex: 28">
+                        </div>
+                        <div class="parameter-input-group">
+                            <label for="logistic-kappa" class="text-sm">κ (Taxa):</label>
+                            <input type="number" id="logistic-kappa" step="any" placeholder="Ex: 0.2">
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-emerald-700">Modelo Gompertz</h3>
+                    <p class="text-sm text-gray-500 mb-2">Equação: Y = α * exp(-exp(κ * (β - X)))</p>
+                    <div class="space-y-2">
+                        <div class="parameter-input-group">
+                            <label for="gompertz-alpha" class="text-sm">α (Assíntota):</label>
+                            <input type="number" id="gompertz-alpha" step="any" placeholder="Ex: 800">
+                        </div>
+                        <div class="parameter-input-group">
+                            <label for="gompertz-beta" class="text-sm">β (Inflexão):</label>
+                            <input type="number" id="gompertz-beta" step="any" placeholder="Ex: 25">
+                        </div>
+                        <div class="parameter-input-group">
+                            <label for="gompertz-kappa" class="text-sm">κ (Taxa):</label>
+                            <input type="number" id="gompertz-kappa" step="any" placeholder="Ex: 0.15">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button id="updateModelChart" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm mb-6">Atualizar Gráfico com Modelos</button>
+            
+            <div class="chart-container">
+                <canvas id="modelChart"></canvas>
+            </div>
+             <div class="mt-6 p-4 border border-gray-200 rounded-lg bg-stone-50">
+                <h3 class="text-gray-700">Interpretação dos Parâmetros:</h3>
+                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1 mt-2">
+                    <li><strong>α (Alfa):</strong> Representa a assíntota horizontal, ou seja, o valor máximo estimado que a variável (e.g., acúmulo de nutriente, altura) pode atingir.</li>
+                    <li><strong>β (Beta):</strong> Indica a abscissa do ponto de inflexão do modelo. Este é o ponto (idade, em DAT) onde a taxa de crescimento ou acúmulo é máxima.</li>
+                    <li><strong>κ (Kappa):</strong> É um índice relacionado à taxa de crescimento ou acúmulo. Quanto maior o valor de κ, mais rapidamente a curva atinge o ponto de inflexão e a assíntota.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="comparisons" class="content-section hidden bg-white p-6 rounded-lg shadow mt-6">
+            <h2>Comparações entre Tratamentos</h2>
+            <p class="text-gray-600 mb-6">Compare os valores máximos observados (aos 42 DAT) para uma variável selecionada entre os quatro tratamentos.</p>
+            <div>
+                <label for="comparison-variable-select" class="block text-sm font-medium text-gray-700">Variável para Comparação:</label>
+                <select id="comparison-variable-select" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                </select>
+            </div>
+            <div class="chart-container mt-6">
+                <canvas id="comparisonChart"></canvas>
+            </div>
+        </section>
+
+        <section id="conclusions" class="content-section hidden bg-white p-6 rounded-lg shadow mt-6">
+            <h2>Conclusões e Implicações Agronômicas</h2>
+            <p class="text-gray-700 leading-relaxed">
+                A modelagem não linear com inferência Bayesiana demonstra ser uma ferramenta eficaz para descrever o crescimento e o acúmulo de macronutrientes em chicória. Esta abordagem permite a estimação precisa de parâmetros biologicamente interpretáveis, a quantificação robusta da incerteza e a identificação de padrões de crescimento e demanda nutricional específicos para cada cultivar e sistema de cultivo.
+            </p>
+            <p class="text-gray-700 leading-relaxed mt-4">
+                Os resultados da dissertação original indicam que o acúmulo de nutrientes (N, P, K, Ca, Mg, S) foi lento na primeira metade do ciclo, acelerando na segunda metade, especialmente entre 21 e 35 DAT. Plantas cobertas com tecido de polipropileno (TP) geralmente apresentaram maiores acúmulos. A cultivar 'AF-218' coberta com TP demonstrou maior acúmulo de K, P, Mg e S e maior desenvolvimento geral em comparação com a 'Chicória Crespa' e os sistemas descobertos.
+            </p>
+            <p class="text-gray-700 leading-relaxed mt-4">
+                As informações geradas são cruciais para o manejo otimizado da chicória, destacando os períodos de maior demanda por nutrientes e o potencial de cada combinação de cultivar e sistema. A aplicação da metodologia Bayesiana, com sua capacidade de incorporar conhecimento prévio e fornecer uma medida intuitiva da incerteza, representa uma contribuição significativa para a pesquisa agronômica e para o desenvolvimento de práticas de fertilização mais eficientes e sustentáveis.
+            </p>
+        </section>
+    </main>
+
+    <footer class="text-center py-8 text-sm text-gray-500">
+        <p>Aplicação Interativa de Análise de Dados de Chicória &copy; 2024</p>
+    </footer>
+
+<script>
+    const chicoryData = [
+        { tratamento: "AF-218 Coberta", cultivar: "AF-218", sistema: "Coberta", idade: 7, nitrogenio: 6.98, potassio: 4.58, fosforo: 0.58, calcio: 3.22, magnesio: 1.06, enxofre: 0.58, altura: 4.10, diametro: 11.67, nFolhas: 6.65, massaSeca: 0.19, massaFresca: 2.41 },
+        { tratamento: "AF-218 Descoberta", cultivar: "AF-218", sistema: "Descoberta", idade: 7, nitrogenio: 6.25, potassio: 3.88, fosforo: 0.50, calcio: 3.36, magnesio: 1.64, enxofre: 0.52, altura: 5.02, diametro: 10.48, nFolhas: 6.05, massaSeca: 0.18, massaFresca: 2.06 },
+        { tratamento: "Crespa Coberta", cultivar: "Crespa", sistema: "Coberta", idade: 7, nitrogenio: 5.40, potassio: 3.22, fosforo: 0.48, calcio: 1.64, magnesio: 1.41, enxofre: 0.47, altura: 5.58, diametro: 10.54, nFolhas: 6.85, massaSeca: 0.17, massaFresca: 1.76 },
+        { tratamento: "Crespa Descoberta", cultivar: "Crespa", sistema: "Descoberta", idade: 7, nitrogenio: 4.32, potassio: 2.80, fosforo: 0.41, calcio: 1.78, magnesio: 1.11, enxofre: 0.36, altura: 4.78, diametro: 9.99, nFolhas: 6.10, massaSeca: 0.14, massaFresca: 1.47 },
+        { tratamento: "AF-218 Coberta", cultivar: "AF-218", sistema: "Coberta", idade: 14, nitrogenio: 47.52, potassio: 38.88, fosforo: 4.40, calcio: 12.60, magnesio: 6.30, enxofre: 3.15, altura: 10.72, diametro: 21.75, nFolhas: 12.00, massaSeca: 1.00, massaFresca: 14.99 },
+        { tratamento: "AF-218 Descoberta", cultivar: "AF-218", sistema: "Descoberta", idade: 14, nitrogenio: 38.88, potassio: 28.08, fosforo: 3.20, calcio: 10.08, magnesio: 4.61, enxofre: 2.30, altura: 9.83, diametro: 18.08, nFolhas: 9.95, massaSeca: 0.78, massaFresca: 10.37 },
+        { tratamento: "Crespa Coberta", cultivar: "Crespa", sistema: "Coberta", idade: 14, nitrogenio: 30.28, potassio: 25.20, fosforo: 2.84, calcio: 7.10, magnesio: 3.91, enxofre: 2.13, altura: 10.03, diametro: 22.91, nFolhas: 14.72, massaSeca: 0.71, massaFresca: 9.58 },
+        { tratamento: "Crespa Descoberta", cultivar: "Crespa", sistema: "Descoberta", idade: 14, nitrogenio: 27.72, potassio: 20.16, fosforo: 2.24, calcio: 6.16, magnesio: 3.02, enxofre: 1.62, altura: 8.65, diametro: 17.50, nFolhas: 10.10, massaSeca: 0.56, massaFresca: 7.06 },
+        { tratamento: "AF-218 Coberta", cultivar: "AF-218", sistema: "Coberta", idade: 21, nitrogenio: 168.64, potassio: 130.56, fosforo: 14.40, calcio: 28.48, magnesio: 13.12, enxofre: 8.48, altura: 15.82, diametro: 31.08, nFolhas: 16.77, massaSeca: 3.20, massaFresca: 47.83 },
+        { tratamento: "AF-218 Descoberta", cultivar: "AF-218", sistema: "Descoberta", idade: 21, nitrogenio: 120.00, potassio: 86.40, fosforo: 9.60, calcio: 18.24, magnesio: 8.40, enxofre: 5.28, altura: 13.53, diametro: 25.83, nFolhas: 14.22, massaSeca: 2.40, massaFresca: 32.00 },
+        { tratamento: "Crespa Coberta", cultivar: "Crespa", sistema: "Coberta", idade: 21, nitrogenio: 98.63, potassio: 80.64, fosforo: 8.82, calcio: 14.70, magnesio: 7.35, enxofre: 5.51, altura: 14.17, diametro: 33.00, nFolhas: 21.25, massaSeca: 2.45, massaFresca: 32.42 },
+        { tratamento: "Crespa Descoberta", cultivar: "Crespa", sistema: "Descoberta", idade: 21, nitrogenio: 78.12, potassio: 54.60, fosforo: 6.00, calcio: 10.92, magnesio: 5.28, enxofre: 3.60, altura: 12.05, diametro: 25.83, nFolhas: 17.50, massaSeca: 1.80, massaFresca: 21.69 },
+        { tratamento: "AF-218 Coberta", cultivar: "AF-218", sistema: "Coberta", idade: 28, nitrogenio: 419.71, potassio: 295.68, fosforo: 33.11, calcio: 59.69, magnesio: 27.81, enxofre: 17.36, altura: 20.33, diametro: 39.58, nFolhas: 32.66, massaSeca: 7.93, massaFresca: 117.93 },
+        { tratamento: "AF-218 Descoberta", cultivar: "AF-218", sistema: "Descoberta", idade: 28, nitrogenio: 196.18, potassio: 166.23, fosforo: 18.60, calcio: 30.24, magnesio: 14.05, enxofre: 8.93, altura: 17.74, diametro: 32.93, nFolhas: 21.25, massaSeca: 6.24, massaFresca: 67.07 },
+        { tratamento: "Crespa Coberta", cultivar: "Crespa", sistema: "Coberta", idade: 28, nitrogenio: 246.98, potassio: 230.58, fosforo: 27.16, calcio: 40.74, magnesio: 18.11, enxofre: 12.13, altura: 16.82, diametro: 41.92, nFolhas: 45.25, massaSeca: 7.24, massaFresca: 99.67 },
+        { tratamento: "Crespa Descoberta", cultivar: "Crespa", sistema: "Descoberta", idade: 28, nitrogenio: 156.32, potassio: 124.74, fosforo: 14.64, calcio: 23.42, magnesio: 10.26, enxofre: 6.34, altura: 14.99, diametro: 32.67, nFolhas: 25.50, massaSeca: 4.59, massaFresca: 42.17 },
+        { tratamento: "AF-218 Coberta", cultivar: "AF-218", sistema: "Coberta", idade: 35, nitrogenio: 839.39, potassio: 461.04, fosforo: 64.59, calcio: 81.19, magnesio: 44.87, enxofre: 28.04, altura: 23.37, diametro: 44.49, nFolhas: 58.00, massaSeca: 18.69, massaFresca: 228.91 },
+        { tratamento: "AF-218 Descoberta", cultivar: "AF-218", sistema: "Descoberta", idade: 35, nitrogenio: 461.04, potassio: 302.78, fosforo: 42.48, calcio: 55.41, magnesio: 26.54, enxofre: 15.93, altura: 21.61, diametro: 39.08, nFolhas: 48.75, massaSeca: 12.20, massaFresca: 133.82 },
+        { tratamento: "Crespa Coberta", cultivar: "Crespa", sistema: "Coberta", idade: 35, nitrogenio: 556.00, potassio: 428.40, fosforo: 52.25, calcio: 55.10, magnesio: 28.50, enxofre: 20.90, altura: 20.92, diametro: 48.00, nFolhas: 83.00, massaSeca: 14.82, massaFresca: 213.33 },
+        { tratamento: "Crespa Descoberta", cultivar: "Crespa", sistema: "Descoberta", idade: 35, nitrogenio: 329.28, potassio: 238.18, fosforo: 29.28, calcio: 35.14, magnesio: 16.10, enxofre: 10.24, altura: 18.85, diametro: 40.58, nFolhas: 70.50, massaSeca: 9.15, massaFresca: 104.08 },
+        { tratamento: "AF-218 Coberta", cultivar: "AF-218", sistema: "Coberta", idade: 42, nitrogenio: 836.02, potassio: 598.46, fosforo: 77.93, calcio: 193.75, magnesio: 59.22, enxofre: 31.17, altura: 26.43, diametro: 46.92, nFolhas: 69.33, massaSeca: 31.17, massaFresca: 344.67 },
+        { tratamento: "AF-218 Descoberta", cultivar: "AF-218", sistema: "Descoberta", idade: 42, nitrogenio: 704.16, potassio: 459.26, fosforo: 60.03, calcio: 135.18, magnesio: 42.05, enxofre: 21.03, altura: 24.21, diametro: 42.25, nFolhas: 85.66, massaSeca: 25.05, massaFresca: 259.92 },
+        { tratamento: "Crespa Coberta", cultivar: "Crespa", sistema: "Coberta", idade: 42, nitrogenio: 790.78, potassio: 579.60, fosforo: 69.68, calcio: 126.17, magnesio: 39.98, enxofre: 28.56, altura: 24.03, diametro: 50.01, nFolhas: 52.50, massaSeca: 26.46, massaFresca: 338.50 },
+        { tratamento: "Crespa Descoberta", cultivar: "Crespa", sistema: "Descoberta", idade: 42, nitrogenio: 680.06, potassio: 420.48, fosforo: 50.80, calcio: 103.01, magnesio: 29.78, enxofre: 18.08, altura: 22.15, diametro: 43.92, nFolhas: 72.50, massaSeca: 20.02, massaFresca: 233.58 }
+    ];
+
+    const variables = [
+        { key: 'nitrogenio', name: 'Nitrogênio (mg planta⁻¹)' },
+        { key: 'potassio', name: 'Potássio (mg planta⁻¹)' },
+        { key: 'fosforo', name: 'Fósforo (mg planta⁻¹)' },
+        { key: 'calcio', name: 'Cálcio (mg planta⁻¹)' },
+        { key: 'magnesio', name: 'Magnésio (mg planta⁻¹)' },
+        { key: 'enxofre', name: 'Enxofre (mg planta⁻¹)' },
+        { key: 'altura', name: 'Altura (cm)' },
+        { key: 'diametro', name: 'Diâmetro (cm)' },
+        { key: 'nFolhas', name: 'Nº de Folhas' },
+        { key: 'massaSeca', name: 'Massa Seca (g planta⁻¹)' },
+        { key: 'massaFresca', name: 'Massa Fresca (g planta⁻¹)' }
+    ];
+
+    const ages = [7, 14, 21, 28, 35, 42];
+    const treatments = ["AF-218 Coberta", "AF-218 Descoberta", "Crespa Coberta", "Crespa Descoberta"];
+    const treatmentColors = {
+        "AF-218 Coberta": 'rgba(5, 150, 105, 1)', // emerald-600
+        "AF-218 Descoberta": 'rgba(14, 165, 233, 1)', // sky-600
+        "Crespa Coberta": 'rgba(245, 158, 11, 1)', // amber-500
+        "Crespa Descoberta": 'rgba(244, 63, 94, 1)' // rose-500
+    };
+
+    let dataChartInstance, modelChartInstance, comparisonChartInstance;
+
+    function populateSelectors() {
+        const varSelect = document.getElementById('variable-select');
+        const modelVarSelect = document.getElementById('model-variable-select');
+        const compVarSelect = document.getElementById('comparison-variable-select');
+        
+        variables.forEach(v => {
+            varSelect.innerHTML += `<option value="${v.key}">${v.name}</option>`;
+            modelVarSelect.innerHTML += `<option value="${v.key}">${v.name}</option>`;
+            compVarSelect.innerHTML += `<option value="${v.key}">${v.name}</option>`;
+        });
+    }
+
+    function filterData(variable, cultivar, system) {
+        return chicoryData.filter(d => 
+            (cultivar === "Todos" || d.cultivar === cultivar) &&
+            (system === "Todos" || d.sistema === system)
+        ).map(d => ({ x: d.idade, y: d[variable], tratamento: d.tratamento }));
+    }
+    
+    function filterDataByTreatment(variable, treatmentName) {
+        return chicoryData.filter(d => d.tratamento === treatmentName)
+                          .map(d => ({ x: d.idade, y: d[variable] }));
+    }
+
+    function updateDataChart() {
+        const selectedVariable = document.getElementById('variable-select').value;
+        const selectedCultivar = document.getElementById('cultivar-select').value;
+        const selectedSystem = document.getElementById('system-select').value;
+        const showAll = document.getElementById('show-all-treatments').value === 'true';
+
+        let datasets = [];
+        let tableDataToDisplay = [];
+
+        if (showAll) {
+            document.getElementById('cultivar-select').disabled = true;
+            document.getElementById('system-select').disabled = true;
+            treatments.forEach(treatmentName => {
+                const specificTreatmentData = chicoryData.filter(d => d.tratamento === treatmentName);
+                datasets.push({
+                    label: treatmentName,
+                    data: specificTreatmentData.map(d => ({x: d.idade, y: d[selectedVariable]})),
+                    borderColor: treatmentColors[treatmentName],
+                    backgroundColor: treatmentColors[treatmentName].replace('1)', '0.2)'),
+                    tension: 0.1,
+                    fill: false
+                });
+                if (datasets.length === 1) { // Populate table with first treatment if showing all
+                     tableDataToDisplay = specificTreatmentData.map(d => ({ idade: d.idade, valor: d[selectedVariable] }));
+                }
+            });
+        } else {
+            document.getElementById('cultivar-select').disabled = false;
+            document.getElementById('system-select').disabled = false;
+            const filtered = filterData(selectedVariable, selectedCultivar, selectedSystem);
+            
+            if (selectedCultivar === "Todos" && selectedSystem === "Todos") {
+                 treatments.forEach(treatmentName => {
+                    const specificTreatmentData = chicoryData.filter(d => d.tratamento === treatmentName);
+                    datasets.push({
+                        label: treatmentName,
+                        data: specificTreatmentData.map(d => ({x: d.idade, y: d[selectedVariable]})),
+                        borderColor: treatmentColors[treatmentName],
+                        backgroundColor: treatmentColors[treatmentName].replace('1)', '0.2)'),
+                        tension: 0.1,
+                        fill: false
+                    });
+                 });
+                 tableDataToDisplay = chicoryData.filter(d => d.tratamento === treatments[0]).map(d => ({ idade: d.idade, valor: d[selectedVariable] }));
+
+            } else if (selectedCultivar !== "Todos" && selectedSystem === "Todos") {
+                const systems = ["Coberta", "Descoberta"];
+                systems.forEach(sys => {
+                    const treatmentName = `${selectedCultivar} ${sys}`;
+                     const specificTreatmentData = chicoryData.filter(d => d.tratamento === treatmentName);
+                     if (specificTreatmentData.length > 0) {
+                        datasets.push({
+                            label: treatmentName,
+                            data: specificTreatmentData.map(d => ({x: d.idade, y: d[selectedVariable]})),
+                            borderColor: treatmentColors[treatmentName],
+                            backgroundColor: treatmentColors[treatmentName].replace('1)', '0.2)'),
+                            tension: 0.1,
+                            fill: false
+                        });
+                     }
+                });
+                const firstValidTreatment = datasets.length > 0 ? datasets[0].label : null;
+                if (firstValidTreatment) {
+                   tableDataToDisplay = chicoryData.filter(d => d.tratamento === firstValidTreatment).map(d => ({ idade: d.idade, valor: d[selectedVariable] }));
+                }
+
+            } else if (selectedCultivar === "Todos" && selectedSystem !== "Todos") {
+                const cultivars = ["AF-218", "Crespa"];
+                cultivars.forEach(cult => {
+                    const treatmentName = `${cult} ${selectedSystem}`;
+                    const specificTreatmentData = chicoryData.filter(d => d.tratamento === treatmentName);
+                     if (specificTreatmentData.length > 0) {
+                        datasets.push({
+                            label: treatmentName,
+                            data: specificTreatmentData.map(d => ({x: d.idade, y: d[selectedVariable]})),
+                            borderColor: treatmentColors[treatmentName],
+                            backgroundColor: treatmentColors[treatmentName].replace('1)', '0.2)'),
+                            tension: 0.1,
+                            fill: false
+                        });
+                    }
+                });
+                const firstValidTreatment = datasets.length > 0 ? datasets[0].label : null;
+                if (firstValidTreatment) {
+                   tableDataToDisplay = chicoryData.filter(d => d.tratamento === firstValidTreatment).map(d => ({ idade: d.idade, valor: d[selectedVariable] }));
+                }
+            } else { // Specific cultivar and system
+                const treatmentName = `${selectedCultivar} ${selectedSystem}`;
+                const specificTreatmentData = chicoryData.filter(d => d.tratamento === treatmentName);
+                 if (specificTreatmentData.length > 0) {
+                    datasets.push({
+                        label: treatmentName,
+                        data: specificTreatmentData.map(d => ({x: d.idade, y: d[selectedVariable]})),
+                        borderColor: treatmentColors[treatmentName],
+                        backgroundColor: treatmentColors[treatmentName].replace('1)', '0.2)'),
+                        tension: 0.1,
+                        fill: false
+                    });
+                    tableDataToDisplay = specificTreatmentData.map(d => ({ idade: d.idade, valor: d[selectedVariable] }));
+                }
+            }
+        }
+
+
+        if (dataChartInstance) dataChartInstance.destroy();
+        const ctx = document.getElementById('dataChart').getContext('2d');
+        dataChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { 
+                        title: { display: true, text: 'Idade (DAT)' },
+                        type: 'linear', // Keep linear for consistent point spacing
+                        ticks: {
+                            callback: function(value, index, values) {
+                                return ages.includes(value) ? value : null; // Only show defined ages
+                            },
+                            stepSize: 7,
+                            autoSkip: false
+                        },
+                         min: Math.min(...ages),
+                         max: Math.max(...ages)
+                    },
+                    y: { title: { display: true, text: variables.find(v => v.key === selectedVariable).name } }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            title: function(tooltipItems) {
+                                return `Idade: ${tooltipItems[0].parsed.x} DAT`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        updateDataTable(tableDataToDisplay, selectedVariable);
+    }
+
+    function updateDataTable(data, variableKey) {
+        const tableBody = document.getElementById('dataTableBody');
+        const variableHeader = document.getElementById('dataTableVariableHeader');
+        variableHeader.textContent = variables.find(v => v.key === variableKey).name;
+        tableBody.innerHTML = '';
+        data.forEach(row => {
+            tableBody.innerHTML += `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${row.idade}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${row.valor !== undefined && row.valor !== null ? row.valor.toFixed(2) : 'N/A'}</td>
+                </tr>
+            `;
+        });
+    }
+
+    function logisticModel(X, alpha, beta, kappa) {
+        return alpha / (1 + Math.exp(kappa * (beta - X)));
+    }
+
+    function gompertzModel(X, alpha, beta, kappa) {
+        return alpha * Math.exp(-Math.exp(kappa * (beta - X)));
+    }
+
+    function updateModelChart() {
+        const selectedVariable = document.getElementById('model-variable-select').value;
+        const selectedTreatment = document.getElementById('model-treatment-select').value;
+
+        const observedData = filterDataByTreatment(selectedVariable, selectedTreatment);
+
+        const logisticAlpha = parseFloat(document.getElementById('logistic-alpha').value);
+        const logisticBeta = parseFloat(document.getElementById('logistic-beta').value);
+        const logisticKappa = parseFloat(document.getElementById('logistic-kappa').value);
+
+        const gompertzAlpha = parseFloat(document.getElementById('gompertz-alpha').value);
+        const gompertzBeta = parseFloat(document.getElementById('gompertz-beta').value);
+        const gompertzKappa = parseFloat(document.getElementById('gompertz-kappa').value);
+
+        const datasets = [{
+            label: `Observado: ${selectedTreatment}`,
+            data: observedData,
+            borderColor: treatmentColors[selectedTreatment] || 'rgba(0,0,0,1)',
+            backgroundColor: (treatmentColors[selectedTreatment] || 'rgba(0,0,0,1)').replace('1)', '0.1)'),
+            pointRadius: 5,
+            type: 'scatter'
+        }];
+
+        if (!isNaN(logisticAlpha) && !isNaN(logisticBeta) && !isNaN(logisticKappa)) {
+            const logisticCurve = ages.map(age => ({x: age, y: logisticModel(age, logisticAlpha, logisticBeta, logisticKappa)}));
+            datasets.push({
+                label: 'Modelo Logístico',
+                data: logisticCurve,
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                type: 'line'
+            });
+        }
+
+        if (!isNaN(gompertzAlpha) && !isNaN(gompertzBeta) && !isNaN(gompertzKappa)) {
+            const gompertzCurve = ages.map(age => ({x: age, y: gompertzModel(age, gompertzAlpha, gompertzBeta, gompertzKappa)}));
+            datasets.push({
+                label: 'Modelo Gompertz',
+                data: gompertzCurve,
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                type: 'line'
+            });
+        }
+        
+        if (modelChartInstance) modelChartInstance.destroy();
+        const ctx = document.getElementById('modelChart').getContext('2d');
+        modelChartInstance = new Chart(ctx, {
+            // type: 'line', // Chart.js will handle mixed types
+            data: { datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Idade (DAT)' }, min: 0, max: 45 },
+                    y: { title: { display: true, text: variables.find(v => v.key === selectedVariable).name } }
+                },
+                 plugins: {
+                    tooltip: {
+                        callbacks: {
+                            title: function(tooltipItems) {
+                                return `Idade: ${tooltipItems[0].parsed.x} DAT`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    function updateComparisonChart() {
+        const selectedVariable = document.getElementById('comparison-variable-select').value;
+        const dataAt42DAT = treatments.map(treatmentName => {
+            const entry = chicoryData.find(d => d.tratamento === treatmentName && d.idade === 42);
+            return entry ? entry[selectedVariable] : 0;
+        });
+
+        if (comparisonChartInstance) comparisonChartInstance.destroy();
+        const ctx = document.getElementById('comparisonChart').getContext('2d');
+        comparisonChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: treatments,
+                datasets: [{
+                    label: `${variables.find(v => v.key === selectedVariable).name} aos 42 DAT`,
+                    data: dataAt42DAT,
+                    backgroundColor: treatments.map(t => treatmentColors[t].replace('1)', '0.7)')),
+                    borderColor: treatments.map(t => treatmentColors[t]),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { 
+                        beginAtZero: true,
+                        title: { display: true, text: variables.find(v => v.key === selectedVariable).name }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    }
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+        populateSelectors();
+
+        const navButtons = document.querySelectorAll('.nav-button');
+        const contentSections = document.querySelectorAll('.content-section');
+
+        function switchSection(targetId) {
+            contentSections.forEach(section => {
+                section.classList.add('hidden');
+            });
+            document.getElementById(targetId).classList.remove('hidden');
+
+            navButtons.forEach(button => {
+                button.classList.remove('active');
+                if (button.dataset.section === targetId) {
+                    button.classList.add('active');
+                }
+            });
+            
+            // Initialize or update charts for the active section
+            if (targetId === 'data-explorer' && !dataChartInstance) {
+                updateDataChart();
+            } else if (targetId === 'data-explorer' && dataChartInstance) {
+                 updateDataChart(); // Refresh if already initialized
+            }
+            
+            if (targetId === 'modeling' && !modelChartInstance) {
+                updateModelChart(); // Initial call with default/empty params
+            } else if (targetId === 'modeling' && modelChartInstance) {
+                 updateModelChart();
+            }
+
+            if (targetId === 'comparisons' && !comparisonChartInstance) {
+                updateComparisonChart();
+            } else if (targetId === 'comparisons' && comparisonChartInstance) {
+                updateComparisonChart();
+            }
+        }
+
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                switchSection(button.dataset.section);
+            });
+        });
+
+        document.getElementById('variable-select').addEventListener('change', updateDataChart);
+        document.getElementById('cultivar-select').addEventListener('change', updateDataChart);
+        document.getElementById('system-select').addEventListener('change', updateDataChart);
+        document.getElementById('show-all-treatments').addEventListener('change', updateDataChart);
+        
+        document.getElementById('model-variable-select').addEventListener('change', updateModelChart);
+        document.getElementById('model-treatment-select').addEventListener('change', updateModelChart);
+        document.getElementById('updateModelChart').addEventListener('click', updateModelChart);
+
+        document.getElementById('comparison-variable-select').addEventListener('change', updateComparisonChart);
+
+        // Initial setup
+        switchSection('intro'); // Show intro section by default
+    });
+
+</script>
+</body>
+</html>
